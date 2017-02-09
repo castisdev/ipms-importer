@@ -1,1 +1,4 @@
 .vscode/
+dummy-api-server/*.csv
+dummy-api-server/dummy-api-server
+debug

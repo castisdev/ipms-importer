@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -15,7 +16,7 @@ type handler struct{}
 
 type officeGLBNodeMapping struct {
 	OfficeCode string `json:"officeCode"`
-	GLBNode    string `json:"glbNode"`
+	GLBNode    string `json:"glbNodeCode"`
 }
 
 func (h *handler) getOfficeGLBNodeMapping(w http.ResponseWriter, r *http.Request) {
@@ -27,17 +28,18 @@ func (h *handler) getOfficeGLBNodeMapping(w http.ResponseWriter, r *http.Request
 	}
 	defer f.Close()
 
-	var mapping []officeGLBNodeMapping
+	var m struct {
+		List []officeGLBNodeMapping `json:"officeGLBNodeMappingList"`
+	}
 	s := bufio.NewScanner(f)
 	s.Scan() // skip first line
 	for s.Scan() {
 		ret := strings.Split(s.Text(), ",")
-		mapping = append(mapping, officeGLBNodeMapping{ret[1], ret[0]})
+		m.List = append(m.List, officeGLBNodeMapping{ret[1], ret[0]})
 	}
 	w.Header().Set("Content-Type", "application/json")
-	// w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
-	err = enc.Encode(mapping)
+	err = enc.Encode(m)
 	if err != nil {
 		fmt.Fprintln(w, err)
 		return
@@ -45,7 +47,7 @@ func (h *handler) getOfficeGLBNodeMapping(w http.ResponseWriter, r *http.Request
 }
 
 type glbNodeRegionMapping struct {
-	GLBNode     string `json:"glbNode"`
+	GLBNode     string `json:"glbNodeCode"`
 	ServiceCode string `json:"serviceCode"`
 	RegionID    string `json:"regionId"`
 }
@@ -59,17 +61,18 @@ func (h *handler) getGLBNodeRegionMapping(w http.ResponseWriter, r *http.Request
 	}
 	defer f.Close()
 
-	var mapping []glbNodeRegionMapping
+	var m struct {
+		List []glbNodeRegionMapping `json:"glbNodeRegionMappingList"`
+	}
 	s := bufio.NewScanner(f)
 	s.Scan() // skip first line
 	for s.Scan() {
 		ret := strings.Split(s.Text(), ",")
-		mapping = append(mapping, glbNodeRegionMapping{ret[0], ret[1], ret[2]})
+		m.List = append(m.List, glbNodeRegionMapping{ret[0], ret[1], ret[2]})
 	}
 	w.Header().Set("Content-Type", "application/json")
-	// w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
-	err = enc.Encode(mapping)
+	err = enc.Encode(m)
 	if err != nil {
 		fmt.Fprintln(w, err)
 		return
@@ -121,7 +124,6 @@ func (h *handler) getOfficeRegionMapping(w http.ResponseWriter, r *http.Request)
 		mapping = append(mapping, officeRegionMapping{ret[1], glb.serviceCode, glb.regionID})
 	}
 	w.Header().Set("Content-Type", "application/json")
-	// w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	err = enc.Encode(mapping)
 	if err != nil {
@@ -130,11 +132,35 @@ func (h *handler) getOfficeRegionMapping(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+func (h *handler) postIPRoutingInfoCfg(w http.ResponseWriter, r *http.Request) {
+	type ipRoutingInfo struct {
+		ServiceCode    string `json:"serviceCode"`
+		RegionID       string `json:"regionId"`
+		NetmaskAddress string `json:"netmaskAddress"`
+	}
+
+	var infos []ipRoutingInfo
+	dec := json.NewDecoder(r.Body)
+	err := dec.Decode(&infos)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, err)
+		return
+	}
+
+	for _, i := range infos {
+		log.Printf("[%s, %s, %s]", i.ServiceCode, i.RegionID, i.NetmaskAddress)
+	}
+
+	w.WriteHeader(http.StatusCreated)
+}
+
 func main() {
 	h := &handler{}
 	api := mux.NewRouter()
-	api.HandleFunc("/api/office-glb-mappings", h.getOfficeGLBNodeMapping).Methods("GET")
-	api.HandleFunc("/api/glb-region-mappings", h.getGLBNodeRegionMapping).Methods("GET")
-	api.HandleFunc("/api/office-region-mappings", h.getOfficeRegionMapping).Methods("GET")
+	api.HandleFunc("/mapping/officeGLBNode", h.getOfficeGLBNodeMapping).Methods("GET")
+	api.HandleFunc("/mapping/glbNodeRegion", h.getGLBNodeRegionMapping).Methods("GET")
+	api.HandleFunc("/mapping/officeRegion", h.getOfficeRegionMapping).Methods("GET")
+	api.HandleFunc("/import/IPRoutingInfoCfg/1", h.postIPRoutingInfoCfg).Methods("POST")
 	http.ListenAndServe(":8085", api)
 }
