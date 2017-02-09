@@ -1,4 +1,7 @@
 .vscode/
 dummy-api-server/*.csv
 dummy-api-server/dummy-api-server
+ipms-importer/ipms-importer
 debug
+dummy-api-server/ipms.json
+log/

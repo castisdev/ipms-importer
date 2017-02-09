@@ -3,9 +3,10 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
 	"net"
 	"strconv"
+
+	"github.com/castisdev/cilog"
 )
 
 type ipmsSort []*ipmsRecord
@@ -85,7 +86,7 @@ type contSet []*ipmsRecord
 
 func (set contSet) printLog() {
 	for _, rec := range set {
-		log.Printf("%s, %s, %s, %v", rec.ServiceCode, rec.RegionID, rec.officeCode, rec.ipnet)
+		cilog.Debugf("%s, %s, %s, %v", rec.ServiceCode, rec.RegionID, rec.officeCode, rec.ipnet)
 	}
 }
 
@@ -106,7 +107,7 @@ func newParent(first, second *ipmsRecord) (*ipmsRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("[%s, %s] merge [%v, %v] to [%v]", rec.ServiceCode, rec.RegionID, first.ipnet, second.ipnet, rec.ipnet)
+	cilog.Debugf("[%s, %s] merge [%v, %v] to [%v]", rec.ServiceCode, rec.RegionID, first.ipnet, second.ipnet, rec.ipnet)
 	return rec, nil
 }
 

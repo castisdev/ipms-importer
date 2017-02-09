@@ -133,13 +133,17 @@ func (h *handler) getOfficeRegionMapping(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *handler) postIPRoutingInfoCfg(w http.ResponseWriter, r *http.Request) {
-	type ipRoutingInfo struct {
-		ServiceCode    string `json:"serviceCode"`
-		RegionID       string `json:"regionId"`
-		NetmaskAddress string `json:"netmaskAddress"`
+	type regionInfo struct {
+		RegionID           string   `json:"regionId"`
+		NetMaskAddressList []string `json:"netMaskAddressList"`
 	}
 
-	var infos []ipRoutingInfo
+	type serviceCodeInfo struct {
+		ServiceCode       string        `json:"serviceCode"`
+		RegionNetMaskList []*regionInfo `json:"regionNetMaskList"`
+	}
+
+	var infos []serviceCodeInfo
 	dec := json.NewDecoder(r.Body)
 	err := dec.Decode(&infos)
 	if err != nil {
@@ -148,11 +152,31 @@ func (h *handler) postIPRoutingInfoCfg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, i := range infos {
-		log.Printf("[%s, %s, %s]", i.ServiceCode, i.RegionID, i.NetmaskAddress)
+	cnt := 0
+	for _, s := range infos {
+		serviceCode := s.ServiceCode
+		for _, r := range s.RegionNetMaskList {
+			regionID := r.RegionID
+			for _, n := range r.NetMaskAddressList {
+				log.Printf("[%s, %s, %s]", serviceCode, regionID, n)
+				cnt++
+			}
+		}
 	}
+	log.Printf("total %d lines", cnt)
 
 	w.WriteHeader(http.StatusCreated)
+
+	f, err := os.Create("ipms.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(infos)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func main() {
@@ -161,6 +185,6 @@ func main() {
 	api.HandleFunc("/mapping/officeGLBNode", h.getOfficeGLBNodeMapping).Methods("GET")
 	api.HandleFunc("/mapping/glbNodeRegion", h.getGLBNodeRegionMapping).Methods("GET")
 	api.HandleFunc("/mapping/officeRegion", h.getOfficeRegionMapping).Methods("GET")
-	api.HandleFunc("/import/IPRoutingInfoCfg/1", h.postIPRoutingInfoCfg).Methods("POST")
+	api.HandleFunc("/import/ipms", h.postIPRoutingInfoCfg).Methods("POST")
 	http.ListenAndServe(":8085", api)
 }

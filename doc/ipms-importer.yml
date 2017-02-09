@@ -1,5 +1,5 @@
 log-directory: log
 log-level: info
-office-glb-node-api: http://localhost:8085/mapping/officeGLBNode
-glb-node-region-api: http://localhost:8085/mapping/glbNodeRegion
-ip-routing-info-cfg-api: http://localhost:8085//import/IPRoutingInfoCfg/1
+mapping-office-glb-node-api: http://172.16.51.102:8092/mapping/officeGLBNode
+mapping-glb-node-region-api: http://172.16.51.102:8092/mapping/glbNodeRegion
+import-ipms-api: http://localhost:8085/import/ipms
