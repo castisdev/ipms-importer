@@ -5,3 +5,5 @@ ipms-importer/ipms-importer
 debug
 dummy-api-server/ipms.json
 log/
+doc/config_sample/
+*.exe

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -180,11 +181,14 @@ func (h *handler) postIPRoutingInfoCfg(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	addr := flag.String("addr", ":8780", "listen address")
+	flag.Parse()
+
 	h := &handler{}
 	api := mux.NewRouter()
 	api.HandleFunc("/mapping/officeGLBNode", h.getOfficeGLBNodeMapping).Methods("GET")
 	api.HandleFunc("/mapping/glbNodeRegion", h.getGLBNodeRegionMapping).Methods("GET")
 	api.HandleFunc("/mapping/officeRegion", h.getOfficeRegionMapping).Methods("GET")
 	api.HandleFunc("/import/ipms", h.postIPRoutingInfoCfg).Methods("POST")
-	http.ListenAndServe(":8085", api)
+	http.ListenAndServe(*addr, api)
 }

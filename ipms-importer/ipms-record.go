@@ -86,7 +86,7 @@ type contSet []*ipmsRecord
 
 func (set contSet) printLog() {
 	for _, rec := range set {
-		cilog.Debugf("%s, %s, %s, %v", rec.ServiceCode, rec.RegionID, rec.officeCode, rec.ipnet)
+		cilog.Infof("success to parse ipms data, %s, %s, %s, %v", rec.ServiceCode, rec.RegionID, rec.officeCode, rec.ipnet)
 	}
 }
 
@@ -107,7 +107,7 @@ func newParent(first, second *ipmsRecord) (*ipmsRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	cilog.Debugf("[%s, %s] merge [%v, %v] to [%v]", rec.ServiceCode, rec.RegionID, first.ipnet, second.ipnet, rec.ipnet)
+	cilog.Debugf("[%s, %s, %s] merge [%v, %v] to [%v]", rec.ServiceCode, rec.RegionID, rec.officeCode, first.ipnet, second.ipnet, rec.ipnet)
 	return rec, nil
 }
 
@@ -115,6 +115,7 @@ func (set *contSet) Sum() {
 	if len(*set) <= 1 {
 		return
 	}
+	cilog.Debugf("merge start")
 	var set2 contSet
 	for i := 0; i < len(*set); i++ {
 		rec := (*set)[i]
@@ -131,6 +132,7 @@ func (set *contSet) Sum() {
 		set2 = append(set2, newRec)
 		i++
 	}
+	cilog.Debugf("merge done")
 
 	if len(*set) == len(set2) {
 		return

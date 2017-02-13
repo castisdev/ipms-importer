@@ -227,6 +227,7 @@ func postIPMSRecords(cfg *ymlConfig, infos []*serviceCodeInfo) error {
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Content-Type", "application/json")
 	cilog.Infof("%s %s", req.Method, req.URL)
 
 	resp, err := http.DefaultClient.Do(req)
