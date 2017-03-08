@@ -11,8 +11,8 @@ import (
 type ymlConfig struct {
 	LogDir              string `yaml:"log-directory"`
 	LogLevel            string `yaml:"log-level"`
-	OfficeGLBNodeAPI    string `yaml:"mapping-office-glb-node-api"`
-	GLBNodeRegionAPI    string `yaml:"mapping-glb-node-region-api"`
+	OfficeNodeAPI       string `yaml:"mapping-office-node-api"`
+	NodeGLBIDAPI        string `yaml:"mapping-node-glbid-api"`
 	IPRoutingInfoCfgAPI string `yaml:"import-ipms-api"`
 }
 
@@ -32,11 +32,11 @@ func newYmlConfig(ymlConfigFilePath string) (*ymlConfig, error) {
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"
 	}
-	if cfg.OfficeGLBNodeAPI == "" {
-		return nil, errors.New("mapping-office-glb-node-api not exist")
+	if cfg.OfficeNodeAPI == "" {
+		return nil, errors.New("mapping-office-node-api not exist")
 	}
-	if cfg.GLBNodeRegionAPI == "" {
-		return nil, errors.New("mapping-glb-node-region-api not exist")
+	if cfg.NodeGLBIDAPI == "" {
+		return nil, errors.New("mapping-node-glbid-api not exist")
 	}
 	if cfg.IPRoutingInfoCfgAPI == "" {
 		return nil, errors.New("import-ipms-api not exist")

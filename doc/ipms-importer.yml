@@ -5,11 +5,11 @@ log-directory: log
 # debug | report | info | success | warning | error | fail | exception | critical
 log-level: info
 
-# officeCode - glbNodeCode 매핑 정보 조회 API
-mapping-office-glb-node-api: http://localhost:8070/mapping/officeGLBNode
+# officeCode - nodeCode 매핑 정보 조회 API
+mapping-office-node-api: http://localhost:8070/mapping/officeNode
 
-# glbNodeCode - regionId 매핑 정보 조회 API
-mapping-glb-node-region-api: http://localhost:8070/mapping/glbNodeRegion
+# nodeCode - glbId 매핑 정보 조회 API
+mapping-node-glbid-api: http://localhost:8070/mapping/nodeGLBId
 
 # ip routing 정보 입수 API
 import-ipms-api: http://localhost:8070/import/ipms

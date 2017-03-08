@@ -15,12 +15,12 @@ import (
 
 type handler struct{}
 
-type officeGLBNodeMapping struct {
+type officeNodeMapping struct {
 	OfficeCode string `json:"officeCode"`
-	GLBNode    string `json:"glbNodeCode"`
+	NodeCode   string `json:"nodeCode"`
 }
 
-func (h *handler) getOfficeGLBNodeMapping(w http.ResponseWriter, r *http.Request) {
+func (h *handler) getOfficeNodeMapping(w http.ResponseWriter, r *http.Request) {
 	f, err := os.Open("office-code-mapping.csv")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -30,13 +30,13 @@ func (h *handler) getOfficeGLBNodeMapping(w http.ResponseWriter, r *http.Request
 	defer f.Close()
 
 	var m struct {
-		List []officeGLBNodeMapping `json:"officeGLBNodeMappingList"`
+		List []officeNodeMapping `json:"officeNodeMappingList"`
 	}
 	s := bufio.NewScanner(f)
 	s.Scan() // skip first line
 	for s.Scan() {
 		ret := strings.Split(s.Text(), ",")
-		m.List = append(m.List, officeGLBNodeMapping{ret[1], ret[0]})
+		m.List = append(m.List, officeNodeMapping{ret[1], ret[0]})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
@@ -47,13 +47,13 @@ func (h *handler) getOfficeGLBNodeMapping(w http.ResponseWriter, r *http.Request
 	}
 }
 
-type glbNodeRegionMapping struct {
-	GLBNode     string `json:"glbNodeCode"`
+type nodeGLBIDMapping struct {
+	NodeCode    string `json:"nodeCode"`
 	ServiceCode string `json:"serviceCode"`
-	RegionID    string `json:"regionId"`
+	GLBID       string `json:"glbId"`
 }
 
-func (h *handler) getGLBNodeRegionMapping(w http.ResponseWriter, r *http.Request) {
+func (h *handler) getNodeGLBIDMapping(w http.ResponseWriter, r *http.Request) {
 	f, err := os.Open("glb-mapping.csv")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -63,13 +63,13 @@ func (h *handler) getGLBNodeRegionMapping(w http.ResponseWriter, r *http.Request
 	defer f.Close()
 
 	var m struct {
-		List []glbNodeRegionMapping `json:"glbNodeRegionMappingList"`
+		List []nodeGLBIDMapping `json:"nodeGLBIdMappingList"`
 	}
 	s := bufio.NewScanner(f)
 	s.Scan() // skip first line
 	for s.Scan() {
 		ret := strings.Split(s.Text(), ",")
-		m.List = append(m.List, glbNodeRegionMapping{ret[0], ret[1], ret[2]})
+		m.List = append(m.List, nodeGLBIDMapping{ret[0], ret[1], ret[2]})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
@@ -80,68 +80,19 @@ func (h *handler) getGLBNodeRegionMapping(w http.ResponseWriter, r *http.Request
 	}
 }
 
-type officeRegionMapping struct {
-	OfficeCode  string `json:"officeCode"`
-	ServiceCode string `json:"serviceCode"`
-	RegionID    string `json:"regionId"`
-}
-
-func (h *handler) getOfficeRegionMapping(w http.ResponseWriter, r *http.Request) {
-	type serviceCodeRegionID struct {
-		serviceCode, regionID string
-	}
-	glbMapping := map[string]serviceCodeRegionID{}
-	{
-		f, err := os.Open("glb-mapping.csv")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintln(w, err)
-			return
-		}
-
-		s := bufio.NewScanner(f)
-		s.Scan() // skip first line
-		for s.Scan() {
-			ret := strings.Split(s.Text(), ",")
-			glbMapping[ret[0]] = serviceCodeRegionID{ret[1], ret[2]}
-		}
-		f.Close()
-	}
-
-	f, err := os.Open("office-code-mapping.csv")
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintln(w, err)
-		return
-	}
-	defer f.Close()
-
-	var mapping []officeRegionMapping
-	s := bufio.NewScanner(f)
-	s.Scan() // skip first line
-	for s.Scan() {
-		ret := strings.Split(s.Text(), ",")
-		glb := glbMapping[ret[0]]
-		mapping = append(mapping, officeRegionMapping{ret[1], glb.serviceCode, glb.regionID})
-	}
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	err = enc.Encode(mapping)
-	if err != nil {
-		fmt.Fprintln(w, err)
-		return
-	}
-}
-
 func (h *handler) postIPRoutingInfoCfg(w http.ResponseWriter, r *http.Request) {
-	type regionInfo struct {
-		RegionID           string   `json:"regionId"`
-		NetMaskAddressList []string `json:"netMaskAddressList"`
+	type netMaskInfo struct {
+		NetMaskAddress string `json:"netMaskAddress"`
+		NetCode        string `json:"netCode"`
+	}
+	type glbInfo struct {
+		GLBID              string         `json:"glbId"`
+		NetMaskAddressList []*netMaskInfo `json:"netMaskAddressList"`
 	}
 
 	type serviceCodeInfo struct {
-		ServiceCode       string        `json:"serviceCode"`
-		RegionNetMaskList []*regionInfo `json:"regionNetMaskList"`
+		ServiceCode      string     `json:"serviceCode"`
+		GLBIDNetMaskList []*glbInfo `json:"glbIdNetMaskList"`
 	}
 
 	var infos []serviceCodeInfo
@@ -156,10 +107,10 @@ func (h *handler) postIPRoutingInfoCfg(w http.ResponseWriter, r *http.Request) {
 	cnt := 0
 	for _, s := range infos {
 		serviceCode := s.ServiceCode
-		for _, r := range s.RegionNetMaskList {
-			regionID := r.RegionID
+		for _, r := range s.GLBIDNetMaskList {
+			regionID := r.GLBID
 			for _, n := range r.NetMaskAddressList {
-				log.Printf("[%s, %s, %s]", serviceCode, regionID, n)
+				log.Printf("[%s, %s, %s, %s]", serviceCode, regionID, n.NetCode, n.NetMaskAddress)
 				cnt++
 			}
 		}
@@ -186,9 +137,8 @@ func main() {
 
 	h := &handler{}
 	api := mux.NewRouter()
-	api.HandleFunc("/mapping/officeGLBNode", h.getOfficeGLBNodeMapping).Methods("GET")
-	api.HandleFunc("/mapping/glbNodeRegion", h.getGLBNodeRegionMapping).Methods("GET")
-	api.HandleFunc("/mapping/officeRegion", h.getOfficeRegionMapping).Methods("GET")
+	api.HandleFunc("/mapping/officeNode", h.getOfficeNodeMapping).Methods("GET")
+	api.HandleFunc("/mapping/nodeGLBId", h.getNodeGLBIDMapping).Methods("GET")
 	api.HandleFunc("/import/ipms", h.postIPRoutingInfoCfg).Methods("POST")
 	http.ListenAndServe(*addr, api)
 }

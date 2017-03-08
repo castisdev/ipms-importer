@@ -14,11 +14,8 @@ const (
 	component   = "ipms-importer"
 	ymlFilename = "ipms-importer.yml"
 	ver         = "1.0.0"
-	preRelVer   = "-rc.0"
+	preRelVer   = "-rc.1"
 )
-
-var usage = func() {
-}
 
 func main() {
 	flag.Usage = func() {
@@ -75,7 +72,7 @@ func main() {
 
 	cilog.Infof("program started")
 
-	mapping, err := getOfficeRegionMapping(cfg)
+	mapping, err := getOfficeGLBIDMapping(cfg)
 	if err != nil {
 		str := fmt.Sprintf("failed to get mapping info, %v", err)
 		cilog.Errorf(str)

@@ -14,29 +14,29 @@ import (
 	"github.com/castisdev/cilog"
 )
 
-type officeGLBNodeMapping struct {
+type officeNodeMapping struct {
 	OfficeCode string `json:"officeCode"`
-	GLBNode    string `json:"glbNodeCode"`
+	NodeCode   string `json:"nodeCode"`
 }
 
-type glbNodeRegionMapping struct {
-	GLBNode     string `json:"glbNodeCode"`
+type nodeGLBIDMapping struct {
+	NodeCode    string `json:"nodeCode"`
 	ServiceCode string `json:"serviceCode"`
-	RegionID    string `json:"regionId"`
+	GLBID       string `json:"glbId"`
 }
 
-type officeRegionMapping struct {
+type officeGLBIDMapping struct {
 	OfficeCode  string `json:"officeCode"`
 	ServiceCode string `json:"serviceCode"`
-	RegionID    string `json:"regionId"`
+	GLBID       string `json:"glbId"`
 }
 
-func getOfficeRegionMapping(cfg *ymlConfig) (map[string][]officeRegionMapping, error) {
-	var officeGlbs struct {
-		List []officeGLBNodeMapping `json:"officeGLBNodeMappingList"`
+func getOfficeGLBIDMapping(cfg *ymlConfig) (map[string][]officeGLBIDMapping, error) {
+	var officeNodes struct {
+		List []officeNodeMapping `json:"officeNodeMappingList"`
 	}
 	{
-		req, err := http.NewRequest("GET", cfg.OfficeGLBNodeAPI, nil)
+		req, err := http.NewRequest("GET", cfg.OfficeNodeAPI, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -57,16 +57,16 @@ func getOfficeRegionMapping(cfg *ymlConfig) (map[string][]officeRegionMapping, e
 		cilog.Infof(resp.Status)
 
 		dec := json.NewDecoder(resp.Body)
-		err = dec.Decode(&officeGlbs)
+		err = dec.Decode(&officeNodes)
 		if err != nil {
 			return nil, err
 		}
-		cilog.Infof("success to get office-code-glb-node-code-mapping, row[%d]", len(officeGlbs.List))
+		cilog.Infof("success to get office-code-node-code-mapping, row[%d]", len(officeNodes.List))
 	}
 
-	glbRegionMap := map[string][]glbNodeRegionMapping{}
+	nodeGLBIDMap := map[string][]nodeGLBIDMapping{}
 	{
-		req, err := http.NewRequest("GET", cfg.GLBNodeRegionAPI, nil)
+		req, err := http.NewRequest("GET", cfg.NodeGLBIDAPI, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -88,54 +88,59 @@ func getOfficeRegionMapping(cfg *ymlConfig) (map[string][]officeRegionMapping, e
 
 		dec := json.NewDecoder(resp.Body)
 
-		var glbRegions struct {
-			List []glbNodeRegionMapping `json:"glbNodeRegionMappingList"`
+		var nodeGLBIDs struct {
+			List []nodeGLBIDMapping `json:"nodeGLBIdMappingList"`
 		}
-		err = dec.Decode(&glbRegions)
+		err = dec.Decode(&nodeGLBIDs)
 		if err != nil {
 			return nil, err
 		}
-		cilog.Infof("success to get glb-node-code-region-id-mapping, row[%d]", len(glbRegions.List))
+		cilog.Infof("success to get node-code-glb-id-mapping, row[%d]", len(nodeGLBIDs.List))
 
-		for _, m := range glbRegions.List {
-			glbRegionMap[m.GLBNode] = append(glbRegionMap[m.GLBNode], m)
+		for _, m := range nodeGLBIDs.List {
+			nodeGLBIDMap[m.NodeCode] = append(nodeGLBIDMap[m.NodeCode], m)
 		}
 	}
 
 	failedNodes := map[string]struct{}{}
-	mapping := map[string][]officeRegionMapping{}
-	for _, m := range officeGlbs.List {
-		if regions, ok := glbRegionMap[m.GLBNode]; ok {
+	mapping := map[string][]officeGLBIDMapping{}
+	for _, m := range officeNodes.List {
+		if regions, ok := nodeGLBIDMap[m.NodeCode]; ok {
 			for _, r := range regions {
-				mapping[m.OfficeCode] = append(mapping[m.OfficeCode], officeRegionMapping{
+				mapping[m.OfficeCode] = append(mapping[m.OfficeCode], officeGLBIDMapping{
 					OfficeCode:  m.OfficeCode,
 					ServiceCode: r.ServiceCode,
-					RegionID:    r.RegionID,
+					GLBID:       r.GLBID,
 				})
 			}
 		} else {
-			failedNodes[m.GLBNode] = struct{}{}
+			failedNodes[m.NodeCode] = struct{}{}
 		}
 	}
 
 	for k := range failedNodes {
-		cilog.Warningf("failed to find glbNodeCode[%s]", k)
+		cilog.Warningf("failed to find glbId[%s]", k)
 	}
 
 	return mapping, nil
 }
 
-type regionInfo struct {
-	RegionID           string   `json:"regionId"`
-	NetMaskAddressList []string `json:"netMaskAddressList"`
+type netMaskInfo struct {
+	NetMaskAddress string `json:"netMaskAddress"`
+	NetCode        string `json:"netCode"`
+}
+
+type glbInfo struct {
+	GLBID              string         `json:"glbId"`
+	NetMaskAddressList []*netMaskInfo `json:"netMaskAddressList"`
 }
 
 type serviceCodeInfo struct {
-	ServiceCode       string        `json:"serviceCode"`
-	RegionNetMaskList []*regionInfo `json:"regionNetMaskList"`
+	ServiceCode      string     `json:"serviceCode"`
+	GLBIDNetMaskList []*glbInfo `json:"glbIdNetMaskList"`
 }
 
-func getIPMSRecords(filename string, mapping map[string][]officeRegionMapping) ([]*serviceCodeInfo, error) {
+func getIPMSRecords(filename string, mapping map[string][]officeGLBIDMapping) ([]*serviceCodeInfo, error) {
 	var recs []*ipmsRecord
 	{
 		f, err := os.Open(filename)
@@ -152,10 +157,15 @@ func getIPMSRecords(filename string, mapping map[string][]officeRegionMapping) (
 			line := s.Text()
 			lineCnt++
 			ret := strings.Split(line, "|")
+			if len(ret) < 8 {
+				cilog.Warningf("invalid line[%d], %s", lineCnt, line)
+				invalidLineCnt++
+				continue
+			}
 			officeCode := ret[5]
 			if glbs, ok := mapping[officeCode]; ok {
 				for _, glb := range glbs {
-					rec, err := newRecord(glb.ServiceCode, glb.RegionID, officeCode, ret[0], ret[7])
+					rec, err := newRecord(glb.ServiceCode, glb.GLBID, ret[1], officeCode, ret[0], ret[7])
 					if err != nil {
 						return nil, err
 					}
@@ -193,11 +203,16 @@ func getIPMSRecords(filename string, mapping map[string][]officeRegionMapping) (
 		}
 	}
 
+	// last set
+	set.Sum()
+	set.printLog()
+	resultSet = append(resultSet, set...)
+
 	var serviceCodeInfos []*serviceCodeInfo
 	var scInfo *serviceCodeInfo
-	var rInfo *regionInfo
+	var rInfo *glbInfo
 
-	var prevServiceCode, prevRegionID string
+	var prevServiceCode, prevGLBID string
 	for _, rec2 := range resultSet {
 		if prevServiceCode != rec2.ServiceCode {
 			scInfo = &serviceCodeInfo{}
@@ -205,13 +220,13 @@ func getIPMSRecords(filename string, mapping map[string][]officeRegionMapping) (
 			prevServiceCode = rec2.ServiceCode
 			serviceCodeInfos = append(serviceCodeInfos, scInfo)
 		}
-		if prevRegionID != rec2.RegionID {
-			rInfo = &regionInfo{}
-			rInfo.RegionID = rec2.RegionID
-			prevRegionID = rec2.RegionID
-			scInfo.RegionNetMaskList = append(scInfo.RegionNetMaskList, rInfo)
+		if prevGLBID != rec2.GLBID {
+			rInfo = &glbInfo{}
+			rInfo.GLBID = rec2.GLBID
+			prevGLBID = rec2.GLBID
+			scInfo.GLBIDNetMaskList = append(scInfo.GLBIDNetMaskList, rInfo)
 		}
-		rInfo.NetMaskAddressList = append(rInfo.NetMaskAddressList, rec2.CIDR)
+		rInfo.NetMaskAddressList = append(rInfo.NetMaskAddressList, &netMaskInfo{rec2.CIDR, rec2.NetCode})
 	}
 	cilog.Infof("success to merge, lines[%d]", len(resultSet))
 	return serviceCodeInfos, nil

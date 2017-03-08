@@ -21,8 +21,11 @@ func (s ipmsSort) Less(i, j int) bool {
 	if s[i].ServiceCode != s[j].ServiceCode {
 		return s[i].ServiceCode < s[j].ServiceCode
 	}
-	if s[i].RegionID != s[j].RegionID {
-		return s[i].RegionID < s[j].RegionID
+	if s[i].GLBID != s[j].GLBID {
+		return s[i].GLBID < s[j].GLBID
+	}
+	if s[i].NetCode != s[j].NetCode {
+		return s[i].NetCode < s[j].NetCode
 	}
 	return s[i].ipStartInt < s[j].ipStartInt
 }
@@ -38,16 +41,18 @@ type ipmsRecord struct {
 	ipStartInt  int
 	prefix      int
 	ServiceCode string `json:"serviceCode"`
-	RegionID    string `json:"regionId"`
+	GLBID       string `json:"glbId"`
+	NetCode     string `json:"netCode"`
 	officeCode  string
 	CIDR        string `json:"netMaskAddress"`
 	ipnet       *net.IPNet
 }
 
-func newRecord(serviceCode, regionID, officeCode, ipStart, prefix string) (*ipmsRecord, error) {
+func newRecord(serviceCode, glbID, netCode, officeCode, ipStart, prefix string) (*ipmsRecord, error) {
 	rec := &ipmsRecord{
 		ServiceCode: serviceCode,
-		RegionID:    regionID,
+		NetCode:     netCode,
+		GLBID:       glbID,
 		officeCode:  officeCode,
 	}
 
@@ -86,14 +91,15 @@ type contSet []*ipmsRecord
 
 func (set contSet) printLog() {
 	for _, rec := range set {
-		cilog.Infof("success to parse ipms data, %s, %s, %s, %v", rec.ServiceCode, rec.RegionID, rec.officeCode, rec.ipnet)
+		cilog.Infof("success to parse ipms data, serviceCode[%s], glbId[%s], netCode[%s], netMask[%v]", rec.ServiceCode, rec.GLBID, rec.NetCode, rec.ipnet)
 	}
 }
 
 func newParent(first, second *ipmsRecord) (*ipmsRecord, error) {
 	rec := &ipmsRecord{
 		ServiceCode: first.ServiceCode,
-		RegionID:    first.RegionID,
+		NetCode:     first.NetCode,
+		GLBID:       first.GLBID,
 		officeCode:  first.officeCode,
 		prefix:      first.prefix - 1,
 	}
@@ -107,7 +113,7 @@ func newParent(first, second *ipmsRecord) (*ipmsRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	cilog.Debugf("[%s, %s, %s] merge [%v, %v] to [%v]", rec.ServiceCode, rec.RegionID, rec.officeCode, first.ipnet, second.ipnet, rec.ipnet)
+	cilog.Debugf("[%s, %s, %s] merge [%v, %v] to [%v]", rec.ServiceCode, rec.GLBID, rec.NetCode, first.ipnet, second.ipnet, rec.ipnet)
 	return rec, nil
 }
 
@@ -153,7 +159,10 @@ func (set contSet) IsCont(r *ipmsRecord) bool {
 	if set[0].ServiceCode != r.ServiceCode {
 		return false
 	}
-	if set[0].RegionID != r.RegionID {
+	if set[0].GLBID != r.GLBID {
+		return false
+	}
+	if set[0].NetCode != r.NetCode {
 		return false
 	}
 	return set[len(set)-1].NextStartIP().String() == r.ipStart.String()
