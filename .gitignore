@@ -9,3 +9,4 @@ log/
 doc/config_sample/
 doc/jkh/
 *.exe
+/*.tar.gz

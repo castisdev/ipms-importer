@@ -1,0 +1,15 @@
+# log directory
+log-directory: log
+
+# log level
+# debug | report | info | success | warning | error | fail | exception | critical
+log-level: info
+
+# officeCode - nodeCode 매핑 정보 조회 API
+mapping-office-node-api: http://localhost:8070/mapping/officeNode
+
+# nodeCode - glbId 매핑 정보 조회 API
+mapping-node-glbid-api: http://localhost:8070/mapping/nodeGLBId
+
+# ip routing 정보 입수 API
+import-ipms-api: http://localhost:8070/import/ipms
