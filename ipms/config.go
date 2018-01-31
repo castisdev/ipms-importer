@@ -1,4 +1,4 @@
-package main
+package ipms
 
 import (
 	"errors"
@@ -8,7 +8,8 @@ import (
 	yaml "gopkg.in/yaml.v1"
 )
 
-type ymlConfig struct {
+// YmlConfig :
+type YmlConfig struct {
 	LogDir              string `yaml:"log-directory"`
 	LogLevel            string `yaml:"log-level"`
 	OfficeNodeAPI       string `yaml:"mapping-office-node-api"`
@@ -16,12 +17,13 @@ type ymlConfig struct {
 	IPRoutingInfoCfgAPI string `yaml:"import-ipms-api"`
 }
 
-func newYmlConfig(ymlConfigFilePath string) (*ymlConfig, error) {
+// NewYmlConfig :
+func NewYmlConfig(ymlConfigFilePath string) (*YmlConfig, error) {
 	originData, err := ioutil.ReadFile(ymlConfigFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config, %v", err)
 	}
-	cfg := ymlConfig{}
+	cfg := YmlConfig{}
 	err = yaml.Unmarshal([]byte(originData), &cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal, %v", err)

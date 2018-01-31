@@ -1,39 +1,40 @@
-package main
+package ipms
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"sort"
-	"strings"
 
 	"github.com/castisdev/cilog"
 )
 
-type officeNodeMapping struct {
+// OfficeNodeMapping :
+type OfficeNodeMapping struct {
 	OfficeCode string `json:"officeCode"`
 	NodeCode   string `json:"nodeCode"`
 }
 
-type nodeGLBIDMapping struct {
+// NodeGLBIDMapping :
+type NodeGLBIDMapping struct {
 	NodeCode    string `json:"nodeCode"`
 	ServiceCode string `json:"serviceCode"`
 	GLBID       string `json:"glbId"`
 }
 
-type officeGLBIDMapping struct {
+// OfficeGLBIDMapping :
+type OfficeGLBIDMapping struct {
 	OfficeCode  string `json:"officeCode"`
 	ServiceCode string `json:"serviceCode"`
 	GLBID       string `json:"glbId"`
 }
 
-func getOfficeGLBIDMapping(cfg *ymlConfig) (map[string][]officeGLBIDMapping, error) {
+// GetOfficeGLBIDMapping :
+func GetOfficeGLBIDMapping(cfg *YmlConfig) (map[string][]OfficeGLBIDMapping, error) {
 	var officeNodes struct {
-		List []officeNodeMapping `json:"officeNodeMappingList"`
+		List []OfficeNodeMapping `json:"officeNodeMappingList"`
 	}
 	{
 		req, err := http.NewRequest("GET", cfg.OfficeNodeAPI, nil)
@@ -64,7 +65,7 @@ func getOfficeGLBIDMapping(cfg *ymlConfig) (map[string][]officeGLBIDMapping, err
 		cilog.Infof("success to get office-code-node-code-mapping, row[%d]", len(officeNodes.List))
 	}
 
-	nodeGLBIDMap := map[string][]nodeGLBIDMapping{}
+	nodeGLBIDMap := map[string][]NodeGLBIDMapping{}
 	{
 		req, err := http.NewRequest("GET", cfg.NodeGLBIDAPI, nil)
 		if err != nil {
@@ -89,7 +90,7 @@ func getOfficeGLBIDMapping(cfg *ymlConfig) (map[string][]officeGLBIDMapping, err
 		dec := json.NewDecoder(resp.Body)
 
 		var nodeGLBIDs struct {
-			List []nodeGLBIDMapping `json:"nodeGLBIdMappingList"`
+			List []NodeGLBIDMapping `json:"nodeGLBIdMappingList"`
 		}
 		err = dec.Decode(&nodeGLBIDs)
 		if err != nil {
@@ -103,11 +104,11 @@ func getOfficeGLBIDMapping(cfg *ymlConfig) (map[string][]officeGLBIDMapping, err
 	}
 
 	failedNodes := map[string]struct{}{}
-	mapping := map[string][]officeGLBIDMapping{}
+	mapping := map[string][]OfficeGLBIDMapping{}
 	for _, m := range officeNodes.List {
 		if regions, ok := nodeGLBIDMap[m.NodeCode]; ok {
 			for _, r := range regions {
-				mapping[m.OfficeCode] = append(mapping[m.OfficeCode], officeGLBIDMapping{
+				mapping[m.OfficeCode] = append(mapping[m.OfficeCode], OfficeGLBIDMapping{
 					OfficeCode:  m.OfficeCode,
 					ServiceCode: r.ServiceCode,
 					GLBID:       r.GLBID,
@@ -125,72 +126,30 @@ func getOfficeGLBIDMapping(cfg *ymlConfig) (map[string][]officeGLBIDMapping, err
 	return mapping, nil
 }
 
-type netMaskInfo struct {
+// NetMaskInfo :
+type NetMaskInfo struct {
 	NetMaskAddress string `json:"netMaskAddress"`
 	NetCode        string `json:"netCode"`
 }
 
-type glbInfo struct {
+// GLBInfo :
+type GLBInfo struct {
 	GLBID              string         `json:"glbId"`
-	NetMaskAddressList []*netMaskInfo `json:"netMaskAddressList"`
+	NetMaskAddressList []*NetMaskInfo `json:"netMaskAddressList"`
 }
 
-type serviceCodeInfo struct {
+// ServiceCodeInfo :
+type ServiceCodeInfo struct {
 	ServiceCode      string     `json:"serviceCode"`
-	GLBIDNetMaskList []*glbInfo `json:"glbIdNetMaskList"`
+	GLBIDNetMaskList []*GLBInfo `json:"glbIdNetMaskList"`
 }
 
-func getIPMSRecords(filename string, mapping map[string][]officeGLBIDMapping) ([]*serviceCodeInfo, error) {
-	var recs []*ipmsRecord
-	{
-		f, err := os.Open(filename)
-		if err != nil {
-			return nil, err
-		}
-		defer f.Close()
-
-		s := bufio.NewScanner(f)
-		lineCnt := 0
-		invalidLineCnt := 0
-		failedOfficeCodes := map[string]int{}
-		for s.Scan() {
-			line := s.Text()
-			lineCnt++
-			ret := strings.Split(line, "|")
-			if len(ret) < 8 {
-				cilog.Warningf("invalid line[%d], %s", lineCnt, line)
-				invalidLineCnt++
-				continue
-			}
-			officeCode := ret[5]
-			if glbs, ok := mapping[officeCode]; ok {
-				for _, glb := range glbs {
-					rec, err := newRecord(glb.ServiceCode, glb.GLBID, ret[1], officeCode, ret[0], ret[7])
-					if err != nil {
-						return nil, err
-					}
-					recs = append(recs, rec)
-				}
-			} else {
-				failedOfficeCodes[officeCode] = lineCnt
-				invalidLineCnt++
-			}
-		}
-
-		if err := s.Err(); err != nil {
-			return nil, err
-		}
-
-		for k, v := range failedOfficeCodes {
-			cilog.Warningf("invalid office code, %s, line[%d]", k, v)
-		}
-		cilog.Infof("success to parse file, lines[%d], invalid lines[%d]", len(recs), invalidLineCnt)
-	}
-
+// MergeIPMSRecords :
+func MergeIPMSRecords(recs []*IpmsRecord) ([]*ServiceCodeInfo, error) {
 	sort.Sort(ipmsSort(recs))
 
 	var set contSet
-	var resultSet []*ipmsRecord
+	var resultSet []*IpmsRecord
 	for _, rec := range recs {
 		if set.IsCont(rec) {
 			set.Add(rec)
@@ -208,31 +167,32 @@ func getIPMSRecords(filename string, mapping map[string][]officeGLBIDMapping) ([
 	set.printLog()
 	resultSet = append(resultSet, set...)
 
-	var serviceCodeInfos []*serviceCodeInfo
-	var scInfo *serviceCodeInfo
-	var rInfo *glbInfo
+	var serviceCodeInfos []*ServiceCodeInfo
+	var scInfo *ServiceCodeInfo
+	var rInfo *GLBInfo
 
 	var prevServiceCode, prevGLBID string
 	for _, rec2 := range resultSet {
 		if prevServiceCode != rec2.ServiceCode {
-			scInfo = &serviceCodeInfo{}
+			scInfo = &ServiceCodeInfo{}
 			scInfo.ServiceCode = rec2.ServiceCode
 			prevServiceCode = rec2.ServiceCode
 			serviceCodeInfos = append(serviceCodeInfos, scInfo)
 		}
 		if prevGLBID != rec2.GLBID {
-			rInfo = &glbInfo{}
+			rInfo = &GLBInfo{}
 			rInfo.GLBID = rec2.GLBID
 			prevGLBID = rec2.GLBID
 			scInfo.GLBIDNetMaskList = append(scInfo.GLBIDNetMaskList, rInfo)
 		}
-		rInfo.NetMaskAddressList = append(rInfo.NetMaskAddressList, &netMaskInfo{rec2.CIDR, rec2.NetCode})
+		rInfo.NetMaskAddressList = append(rInfo.NetMaskAddressList, &NetMaskInfo{rec2.CIDR, rec2.NetCode})
 	}
 	cilog.Infof("success to merge, lines[%d]", len(resultSet))
 	return serviceCodeInfos, nil
 }
 
-func postIPMSRecords(cfg *ymlConfig, infos []*serviceCodeInfo) error {
+// PostIPMSRecords :
+func PostIPMSRecords(cfg *YmlConfig, infos []*ServiceCodeInfo) error {
 	b := new(bytes.Buffer)
 	err := json.NewEncoder(b).Encode(infos)
 	if err != nil {

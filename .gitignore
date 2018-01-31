@@ -2,8 +2,10 @@
 dummy-api-server/*.csv
 dummy-api-server/dummy-api-server
 ipms-importer/ipms-importer
+sqlite-importer/sqlite-importer
 debug
 dummy-api-server/ipms.json
 log/
 doc/config_sample/
+doc/jkh/
 *.exe

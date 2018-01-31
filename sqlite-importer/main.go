@@ -1,21 +1,23 @@
 package main
 
 import (
-	"bufio"
+	"database/sql"
 	"flag"
 	"fmt"
+	"log"
+	"net"
 	"os"
 	"path"
-	"strings"
 
 	"github.com/castisdev/cilog"
 	"github.com/castisdev/ipms-importer/ipms"
 	"github.com/kardianos/osext"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
-	component   = "ipms-importer"
-	ymlFilename = "ipms-importer.yml"
+	component   = "sqlite-importer"
+	ymlFilename = "sqlite-importer.yml"
 	ver         = "1.0.1"
 	preRelVer   = "-rc.0"
 )
@@ -116,33 +118,54 @@ func main() {
 func getIPMSRecords(filename string, mapping map[string][]ipms.OfficeGLBIDMapping) ([]*ipms.IpmsRecord, error) {
 	var recs []*ipms.IpmsRecord
 
-	f, err := os.Open(filename)
+	db, err := sql.Open("sqlite3", filename)
 	if err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
-	defer f.Close()
+	defer db.Close()
 
-	s := bufio.NewScanner(f)
+	rows, err := db.Query("select StartIP, EndIP, AMOC_OFC_CD from IPMSfile_to_AMOC_OFFICE_MAPPING")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
 	lineCnt := 0
 	invalidLineCnt := 0
 	failedOfficeCodes := map[string]int{}
-	for s.Scan() {
-		line := s.Text()
+	for rows.Next() {
 		lineCnt++
-		ret := strings.Split(line, "|")
-		if len(ret) < 8 {
-			cilog.Warningf("invalid line[%d], %s", lineCnt, line)
+
+		var s1, s2, s3 sql.NullString
+		err = rows.Scan(&s1, &s2, &s3)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if s1.Valid == false || s2.Valid == false || s3.Valid == false {
+			cilog.Warningf("invalid row[%d]", lineCnt)
 			invalidLineCnt++
 			continue
 		}
-		officeCode := ret[5]
+
+		officeCode := s3.String
 		if glbs, ok := mapping[officeCode]; ok {
 			for _, glb := range glbs {
-				rec, err := ipms.NewRecord(glb.ServiceCode, glb.GLBID, ret[1], officeCode, ret[0], ret[7])
-				if err != nil {
-					return nil, err
+				ips := net.ParseIP(s1.String)
+				ipe := net.ParseIP(s2.String)
+				if ips == nil || ipe == nil {
+					cilog.Warningf("invalid row[%d], %s, %s", lineCnt, s1.String, s2.String)
+					invalidLineCnt++
+					continue
 				}
-				recs = append(recs, rec)
+				cidrs := range2CIDRs(ips, ipe)
+				for _, cidr := range cidrs {
+					rec, err := ipms.NewRecordFromCIDR(glb.ServiceCode, glb.GLBID, "", officeCode, cidr)
+					if err != nil {
+						return nil, err
+					}
+					recs = append(recs, rec)
+				}
 			}
 		} else {
 			failedOfficeCodes[officeCode] = lineCnt
@@ -150,14 +173,88 @@ func getIPMSRecords(filename string, mapping map[string][]ipms.OfficeGLBIDMappin
 		}
 	}
 
-	if err := s.Err(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
 	for k, v := range failedOfficeCodes {
-		cilog.Warningf("invalid office code, %s, line[%d]", k, v)
+		cilog.Warningf("invalid office code, %s, row[%d]", k, v)
 	}
-	cilog.Infof("success to parse file, lines[%d], invalid lines[%d]", len(recs), invalidLineCnt)
+	cilog.Infof("success to read sqlite db, rows[%d], invalid rows[%d], records[%d]", lineCnt, invalidLineCnt, len(recs))
 
 	return recs, nil
+}
+
+var allFF = net.ParseIP("255.255.255.255").To4()
+
+func x(s string) net.IP { return net.ParseIP(s) }
+
+func range2CIDRs(a1, a2 net.IP) (r []*net.IPNet) {
+	maxLen := 32
+	a1 = a1.To4()
+	a2 = a2.To4()
+	for cmp(a1, a2) <= 0 {
+		l := 32
+		for l > 0 {
+			m := net.CIDRMask(l-1, maxLen)
+			if cmp(a1, first(a1, m)) != 0 || cmp(last(a1, m), a2) > 0 {
+				break
+			}
+			l--
+		}
+		r = append(r, &net.IPNet{IP: a1, Mask: net.CIDRMask(l, maxLen)})
+		a1 = last(a1, net.CIDRMask(l, maxLen))
+		if cmp(a1, allFF) == 0 {
+			break
+		}
+		a1 = next(a1)
+	}
+	return r
+}
+
+func next(ip net.IP) net.IP {
+	n := len(ip)
+	out := make(net.IP, n)
+	copy := false
+	for n > 0 {
+		n--
+		if copy {
+			out[n] = ip[n]
+			continue
+		}
+		if ip[n] < 255 {
+			out[n] = ip[n] + 1
+			copy = true
+			continue
+		}
+		out[n] = 0
+	}
+	return out
+}
+
+func cmp(ip1, ip2 net.IP) int {
+	l := len(ip1)
+	for i := 0; i < l; i++ {
+		if ip1[i] == ip2[i] {
+			continue
+		}
+		if ip1[i] < ip2[i] {
+			return -1
+		}
+		return 1
+	}
+	return 0
+}
+
+func first(ip net.IP, mask net.IPMask) net.IP {
+	return ip.Mask(mask)
+}
+
+func last(ip net.IP, mask net.IPMask) net.IP {
+	n := len(ip)
+	out := make(net.IP, n)
+	for i := 0; i < n; i++ {
+		out[i] = ip[i] | ^mask[i]
+	}
+	return out
 }
