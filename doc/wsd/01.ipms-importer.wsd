@@ -1,0 +1,23 @@
+@startuml
+title 구동 시퀀스
+
+participant ipms_importer
+participant sqlite_importer
+participant gslb_config_server
+
+== ipms_importer ==
+
+autonumber
+ipms_importer->gslb_config_server: GET /mapping/officeNode
+ipms_importer->gslb_config_server: GET /mapping/nodeGLBId
+ipms_importer->ipms_importer: Load TB_ASSIGN.DAT
+ipms_importer->gslb_config_server: POST /import/ipms
+
+== sqlite_importer ==
+
+autonumber 11
+sqlite_importer->gslb_config_server: GET /mapping/officeNode
+sqlite_importer->gslb_config_server: GET /mapping/nodeGLBId
+sqlite_importer->sqlite_importer: Load IPMS_DB-share.db
+sqlite_importer->gslb_config_server: POST /import/ipms
+@enduml
