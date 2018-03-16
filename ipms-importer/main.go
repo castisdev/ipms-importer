@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"path"
 	"strings"
@@ -16,7 +17,7 @@ import (
 const (
 	component   = "ipms-importer"
 	ymlFilename = "ipms-importer.yml"
-	ver         = "1.0.1"
+	ver         = "1.0.2"
 	preRelVer   = "-rc.0"
 )
 
@@ -83,7 +84,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ipmsSet, err := getIPMSRecords(flag.Arg(0), mapping)
+	ipmsSet, err := getIPMSRecords2(flag.Arg(0), mapping)
 	if err != nil {
 		str := fmt.Sprintf("failed to get ipms records, %v", err)
 		cilog.Errorf(str)
@@ -138,11 +139,76 @@ func getIPMSRecords(filename string, mapping map[string][]ipms.OfficeGLBIDMappin
 		officeCode := ret[5]
 		if glbs, ok := mapping[officeCode]; ok {
 			for _, glb := range glbs {
-				rec, err := ipms.NewRecord(glb.ServiceCode, glb.GLBID, ret[1], officeCode, ret[0], ret[7])
+				netCode := ret[1]
+				ipStart := ret[0]
+				prefix := ret[7]
+				rec, err := ipms.NewRecord(glb.ServiceCode, glb.GLBID, netCode, officeCode, ipStart, prefix)
 				if err != nil {
 					return nil, err
 				}
 				recs = append(recs, rec)
+			}
+		} else {
+			failedOfficeCodes[officeCode] = lineCnt
+			invalidLineCnt++
+		}
+	}
+
+	if err := s.Err(); err != nil {
+		return nil, err
+	}
+
+	for k, v := range failedOfficeCodes {
+		cilog.Warningf("invalid office code, %s, line[%d]", k, v)
+	}
+	cilog.Infof("success to parse file, lines[%d], invalid lines[%d]", len(recs), invalidLineCnt)
+
+	return recs, nil
+}
+
+func getIPMSRecords2(filename string, mapping map[string][]ipms.OfficeGLBIDMapping) ([]*ipms.IpmsRecord, error) {
+	var recs []*ipms.IpmsRecord
+
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	s := bufio.NewScanner(f)
+	lineCnt := 0
+	invalidLineCnt := 0
+	failedOfficeCodes := map[string]int{}
+	for s.Scan() {
+		line := s.Text()
+		lineCnt++
+		ret := strings.Split(line, "|")
+		if len(ret) != 8 {
+			cilog.Warningf("invalid line[%d], %s", lineCnt, line)
+			invalidLineCnt++
+			continue
+		}
+		officeCode := ret[3]
+		if glbs, ok := mapping[officeCode]; ok {
+			for _, glb := range glbs {
+				netCode := ret[6]
+
+				ips := net.ParseIP(ret[0])
+				ipe := net.ParseIP(ret[1])
+				if ips == nil || ipe == nil {
+					cilog.Warningf("invalid row[%d], %s, %s", lineCnt, ret[0], ret[1])
+					invalidLineCnt++
+					continue
+				}
+
+				cidrs := ipms.Range2CIDRs(ips, ipe)
+				for _, cidr := range cidrs {
+					rec, err := ipms.NewRecordFromCIDR(glb.ServiceCode, glb.GLBID, netCode, officeCode, cidr)
+					if err != nil {
+						return nil, err
+					}
+					recs = append(recs, rec)
+				}
 			}
 		} else {
 			failedOfficeCodes[officeCode] = lineCnt
