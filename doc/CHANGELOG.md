@@ -1,6 +1,6 @@
 v1.0.2-rc0 / 2018-03-16
 ===================
-* IPMS_to_GSLB-20180313.csv 파일 형식 import 기능 추가
+* import 파일 형식 변경 : IPMS_to_GSLB-20180313.csv
   * StartIP|EndIP|Beallorg|IPMS_OFC_CD|IPMS_OFC_NAME|pubpri|NETCODE|Assrole
   * 14.32.0.0|14.32.0.127|강남네트워크운용본부|R00454|양재국사|공인|00|지역
 
