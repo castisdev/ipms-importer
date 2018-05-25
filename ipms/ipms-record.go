@@ -30,6 +30,18 @@ func (s ipmsSort) Less(i, j int) bool {
 	return s[i].IPStartInt < s[j].IPStartInt
 }
 
+type ipmsSort2 []*IpmsRecord
+
+func (s ipmsSort2) Len() int {
+	return len(s)
+}
+func (s ipmsSort2) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s ipmsSort2) Less(i, j int) bool {
+	return s[i].IPStartInt < s[j].IPStartInt
+}
+
 func int2ip(nn uint32) net.IP {
 	ip := make(net.IP, 4)
 	binary.BigEndian.PutUint32(ip, nn)

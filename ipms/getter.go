@@ -2,11 +2,13 @@ package ipms
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/castisdev/cilog"
 )
@@ -191,6 +193,44 @@ func MergeIPMSRecords(recs []*IpmsRecord) ([]*ServiceCodeInfo, error) {
 	return serviceCodeInfos, nil
 }
 
+// ReportCollectorRecord :
+type ReportCollectorRecord struct {
+	NetMaskAddress string `json:"netMaskAddress"`
+	AreaName       string `json:"areaName"`
+	OfficeName     string `json:"officeName"`
+}
+
+// MergeIPMSRecords2 :
+func MergeIPMSRecords2(recs []*IpmsRecord) []*ReportCollectorRecord {
+	sort.Sort(ipmsSort(recs))
+
+	var set contSet
+	var resultSet []*IpmsRecord
+	for _, rec := range recs {
+		if set.IsCont(rec) {
+			set.Add(rec)
+		} else {
+			set.Sum()
+			set.printLog()
+			resultSet = append(resultSet, set...)
+			set = set[:0]
+			set.Add(rec)
+		}
+	}
+
+	// last set
+	set.Sum()
+	set.printLog()
+	resultSet = append(resultSet, set...)
+	sort.Sort(ipmsSort2(resultSet))
+
+	var results []*ReportCollectorRecord
+	for _, rec := range resultSet {
+		results = append(results, &ReportCollectorRecord{rec.CIDR, rec.ServiceCode, rec.GLBID})
+	}
+	return results
+}
+
 // PostIPMSRecords :
 func PostIPMSRecords(cfg *YmlConfig, infos []*ServiceCodeInfo) error {
 	b := new(bytes.Buffer)
@@ -206,6 +246,49 @@ func PostIPMSRecords(cfg *YmlConfig, infos []*ServiceCodeInfo) error {
 	cilog.Infof("%s %s", req.Method, req.URL)
 
 	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			cilog.Warningf("%v", err)
+		}
+		return fmt.Errorf("%s, %s", resp.Status, string(b))
+	}
+	cilog.Infof(resp.Status)
+	return nil
+}
+
+// PostReportCollectorRecords :
+func PostReportCollectorRecords(api string, infos []*ReportCollectorRecord) error {
+	b := new(bytes.Buffer)
+	err := json.NewEncoder(b).Encode(infos)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", api, b)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	cilog.Infof("%s %s", req.Method, req.URL)
+
+	var client *http.Client
+	if strings.HasPrefix(api, "https://") {
+		client = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			},
+		}
+	} else {
+		client = http.DefaultClient
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}

@@ -131,8 +131,47 @@ func (h *handler) postIPRoutingInfoCfg(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *handler) postReportCollector(w http.ResponseWriter, r *http.Request) {
+	type netMaskInfo struct {
+		NetMaskAddress string `json:"netMaskAddress"`
+		AreaName       string `json:"areaName"`
+		OfficeName     string `json:"officeName"`
+	}
+
+	var infos []netMaskInfo
+	dec := json.NewDecoder(r.Body)
+	err := dec.Decode(&infos)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, err)
+		return
+	}
+
+	cnt := 0
+	for _, n := range infos {
+		log.Printf("[%s, %s, %s]", n.NetMaskAddress, n.AreaName, n.OfficeName)
+		cnt++
+	}
+	log.Printf("total %d lines", cnt)
+
+	w.WriteHeader(http.StatusCreated)
+
+	f, err := os.Create("report-collector.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(infos)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 func main() {
 	addr := flag.String("addr", ":8780", "listen address")
+	certFile := flag.String("cert-file", "", "https certificate file")
+	keyFile := flag.String("key-file", "", "https private key file")
 	flag.Parse()
 
 	h := &handler{}
@@ -140,5 +179,17 @@ func main() {
 	api.HandleFunc("/mapping/officeNode", h.getOfficeNodeMapping).Methods("GET")
 	api.HandleFunc("/mapping/nodeGLBId", h.getNodeGLBIDMapping).Methods("GET")
 	api.HandleFunc("/import/ipms", h.postIPRoutingInfoCfg).Methods("POST")
-	http.ListenAndServe(*addr, api)
+	api.HandleFunc("/import/reportCollector", h.postReportCollector).Methods("POST")
+
+	var err error
+	if *certFile != "" && *keyFile != "" {
+		err = http.ListenAndServeTLS(*addr, *certFile, *keyFile, api)
+	} else {
+		err = http.ListenAndServe(*addr, api)
+	}
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
